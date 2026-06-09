@@ -140,7 +140,10 @@ export default function App() {
     log: <LogPage today={today} onLogSave={handleLogSave} stravaConnected={stravaConnected} appleConnected={appleConnected} />,
     trends: <TrendsPage history={history} />,
     headache: <HeadachePage history={history} correlations={correlations} apiKey={apiKey} />,
-    settings: <SettingsPage apiKey={apiKey} onApiKeySave={handleApiKeySave} stravaConnected={stravaConnected} appleConnected={appleConnected} projectId={getProjectId()} />,
+    settings: <SettingsPage apiKey={apiKey} onApiKeySave={handleApiKeySave} stravaConnected={stravaConnected} appleConnected={appleConnected} projectId={getProjectId()} onAppleImport={(days) => {
+      const merged = buildHistory([...days, ...history.filter(d => !d.isPlaceholder)], 90);
+      setHistory(merged);
+    }} />,
   };
 
   return (
