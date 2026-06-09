@@ -4,12 +4,12 @@ import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy,
 // STEP: Replace these placeholders with your Firebase project config
 // Get these from: console.firebase.google.com -> Your project -> Project settings -> Your apps
 const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-  projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-  storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
-  appId: "PASTE_YOUR_APP_ID_HERE"
+  apiKey: "AIzaSyBLk6MEbyBy_7UE9QvW0T3X5JCir4DVLaI",
+  authDomain: "jarreds-data.firebaseapp.com",
+  projectId: "jarreds-data",
+  storageBucket: "jarreds-data.firebasestorage.app",
+  messagingSenderId: "1061453307764",
+  appId: "1:1061453307764:web:c63d4766dbe868111f5621"
 };
 
 const app = initializeApp(firebaseConfig);
