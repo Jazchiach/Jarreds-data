@@ -1,7 +1,7 @@
 // STEP: Replace with your Strava API credentials
 // Get these from: strava.com/settings/api -> Create App
-const STRAVA_CLIENT_ID = 'PASTE_YOUR_STRAVA_CLIENT_ID_HERE';
-const STRAVA_CLIENT_SECRET = 'PASTE_YOUR_STRAVA_CLIENT_SECRET_HERE';
+const STRAVA_CLIENT_ID = '256601';
+const STRAVA_CLIENT_SECRET = '4a847695a8c3e14ec07775993bce84b9f8611f05';
 const REDIRECT_URI = window.location.origin + '/strava-callback';
 
 // Strava OAuth scopes we need
