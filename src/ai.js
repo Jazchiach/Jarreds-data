@@ -1,79 +1,77 @@
-const MODEL = 'claude-sonnet-4-20250514';
+// Apple Health data is sent by an iPhone Shortcut each morning
+// The Shortcut runs automatically, reads Health app data, and calls our Firebase endpoint
+// This file handles parsing and validating that incoming data
 
-export async function generateDailyBrief(apiKey, { readiness, headacheRisk, today, avgHrv }) {
-  const stravaInfo = today.stravaId
-    ? `Strava activity: ${today.activityName || 'workout'}, ${today.durationMins} mins, suffer score ${today.sufferScore || 'n/a'}.`
-    : '';
-  const appleInfo = today.appleHealthSynced
-    ? `Apple Health: deep sleep ${today.deepSleepMins || '?'}min, REM ${today.remSleepMins || '?'}min, respiratory rate ${today.respiratoryRate || '?'} breaths/min, steps yesterday ${today.steps || '?'}.`
-    : '';
+/**
+ * Expected payload from iPhone Shortcut:
+ * {
+ *   date: "2026-06-05",
+ *   hrv: 58,                    // ms, overnight average
+ *   restingHr: 49,              // bpm
+ *   sleepHrs: 7.3,              // total sleep hours
+ *   sleepQuality: "good",       // derived from duration
+ *   deepSleepMins: 94,          // minutes of deep sleep
+ *   remSleepMins: 112,          // minutes of REM sleep
+ *   spo2: 97,                   // %
+ *   respiratoryRate: 14.2,      // breaths/min
+ *   steps: 8420,                // steps previous day
+ *   activeEnergy: 680,          // kcal
+ * }
+ */
 
-  const prompt = `You are a sports science and nutrition AI for Jarred, a 40-year-old elite endurance athlete based in Sydney. He trains every morning at 6:30am (Zwift cycling + running), focused on optimising performance, recovery, and reducing afternoon headaches (MRI clear, likely exercise/lifestyle-related). He wants to reduce sugar and poor calorie intake.
+export function parseAppleHealthPayload(raw) {
+  const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const sleepHrs = parseFloat(d.sleepHrs) || 0;
+  const sleepQuality = sleepHrs >= 8 ? 'great'
+    : sleepHrs >= 7.5 ? 'good'
+    : sleepHrs >= 7 ? 'good'
+    : sleepHrs >= 6.5 ? 'ok'
+    : 'poor';
 
-Today's data:
-- Training readiness: ${readiness}/100
-- HRV: ${today.hrv}ms (30-day avg: ${avgHrv}ms, delta: ${today.hrv - avgHrv > 0 ? '+' : ''}${today.hrv - avgHrv}ms)
-- Resting HR: ${today.restingHr}bpm
-- Sleep: ${today.sleepHrs}h (quality: ${today.sleepQuality})
-- Session today: ${today.workoutLoad}
-- SpO2: ${today.spo2}%
-- Electrolytes post-workout: ${today.electrolytes || 'not logged'}
-- Headache risk today: ${headacheRisk.level} (score ${headacheRisk.score}/100)
-${stravaInfo}
-${appleInfo}
-
-Generate exactly 4 highly personalised, evidence-based health insights for today. Each must reference his actual data numbers -- no generic advice. Cover: (1) post-workout protein/nutrition timing, (2) hydration and electrolyte strategy specific to today's load, (3) sugar and refined carb guidance, (4) recovery or sleep optimisation.
-
-Respond ONLY as a JSON array, no preamble, no markdown fences:
-[{"title":"short title","body":"2-3 sentences referencing his actual data","icon":"nutrition|hydration|recovery|sleep|sugar"}]`;
-
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }),
-    });
-    const data = await r.json();
-    const text = data.content?.map(b => b.text || '').join('');
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch (e) {
-    return fallbackBrief(today, headacheRisk);
-  }
+  return {
+    date: d.date,
+    hrv: Math.round(parseFloat(d.hrv) || 0),
+    restingHr: Math.round(parseFloat(d.restingHr) || 0),
+    sleepHrs: Math.round(sleepHrs * 10) / 10,
+    sleepQuality,
+    deepSleepMins: Math.round(parseFloat(d.deepSleepMins) || 0),
+    remSleepMins: Math.round(parseFloat(d.remSleepMins) || 0),
+    spo2: Math.round(parseFloat(d.spo2) || 0),
+    respiratoryRate: Math.round(parseFloat(d.respiratoryRate) * 10) / 10,
+    steps: Math.round(parseFloat(d.steps) || 0),
+    activeEnergy: Math.round(parseFloat(d.activeEnergy) || 0),
+    appleHealthSynced: true,
+    appleHealthSyncedAt: new Date().toISOString(),
+  };
 }
 
-export async function generateHeadacheAnalysis(apiKey, correlations, history) {
-  const total = history.filter(d => d.hadHeadache).length;
-  const top = correlations.slice(0, 3).map(c => `${c.label} (${c.pct}% of events)`).join(', ');
-  const hasStrava = history.some(d => d.stravaId);
-  const hasApple = history.some(d => d.appleHealthSynced);
-
-  const prompt = `Sports medicine AI. Patient: Jarred, 40yo male endurance athlete, Sydney. Very fit, trains 6 mornings/week (Zwift cycling + running), clear MRI, afternoon headaches believed lifestyle-related. ${hasStrava ? 'Strava data integrated.' : ''} ${hasApple ? 'Apple Health data integrated (HRV, sleep stages).' : ''}
-
-${total} headache events logged. Top correlating factors: ${top}.
-
-Provide: (1) a 3-4 sentence physiological interpretation of the most likely mechanism(s) -- consider exercise-associated hyponatremia, post-exertional cerebral vasodilation, dehydration, tension/cervicogenic factors from cycling posture. (2) 3 specific, evidence-based interventions ranked by likelihood of impact.
-
-Respond ONLY as JSON, no preamble: {"interpretation":"...","recommendations":["...","...","..."]}`;
-
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 700, messages: [{ role: 'user', content: prompt }] }),
-    });
-    const data = await r.json();
-    const text = data.content?.map(b => b.text || '').join('');
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch (e) {
-    return { interpretation: 'Check your API key in Settings.', recommendations: [] };
-  }
+// Generate the Apple Shortcut URL scheme for the setup guide
+// This tells the user exactly what URL their shortcut should POST to
+export function getShortcutWebhookUrl(projectId) {
+  if (!projectId || projectId === 'PASTE_YOUR_PROJECT_ID_HERE') return null;
+  // Firebase callable function URL -- set up in step-by-step guide
+  return `https://${projectId}.web.app/api/apple-health`;
 }
 
-function fallbackBrief(today, headacheRisk) {
-  return [
-    { icon: 'nutrition', title: 'Post-workout protein window', body: `After a ${today.workoutLoad} session, target 30-40g protein within 45 minutes. Greek yoghurt, eggs, or whey without added sugar. This supports muscle repair and blunts the cortisol spike from training.` },
-    { icon: 'hydration', title: 'Electrolyte strategy today', body: `${today.electrolytes === 'none' ? 'No electrolytes logged -- high risk.' : today.electrolytes === 'partial' ? 'Partial electrolytes logged.' : 'Good electrolyte intake.'} Target 500ml with sodium within 30 mins of finishing. Plain water alone can dilute remaining sodium and trigger afternoon headaches.` },
-    { icon: 'sugar', title: 'Refined carb watch', body: `${today.workoutLoad === 'hard' ? 'Hard sessions increase sugar cravings.' : 'Stay consistent with nutrition quality today.'} Stick to whole-food carbs -- sweet potato, oats, fruit. Avoid processed snacks which cause blood sugar swings compounding afternoon fatigue.` },
-    { icon: 'recovery', title: 'Recovery note', body: `HRV of ${today.hrv}ms is ${today.hrv < 55 ? 'below' : 'near'} your baseline. Prioritise sleep before midnight tonight. Alcohol suppresses deep sleep and blunts HRV recovery -- even one drink shifts your baseline.` },
-  ];
+// Derive sleep quality label from hours
+export function sleepLabel(hrs) {
+  if (hrs >= 8) return 'great';
+  if (hrs >= 7.5) return 'good';
+  if (hrs >= 7) return 'good';
+  if (hrs >= 6.5) return 'ok';
+  return 'poor';
 }
+
+// The iPhone Shortcut script (shown to user in Settings > Apple Health setup)
+export const SHORTCUT_INSTRUCTIONS = `
+WHAT THE SHORTCUT DOES:
+Every morning at 6:00am, your iPhone automatically reads last night's data
+from the Apple Health app and sends it to your Health OS database.
+Data collected: HRV, resting heart rate, sleep hours, deep sleep,
+REM sleep, SpO2, respiratory rate, steps, active energy.
+
+HOW TO SET IT UP:
+1. Open the Shortcuts app on your iPhone
+2. Tap the + button to create a new shortcut
+3. Follow the step-by-step guide in Settings > Apple Health in the app
+`;
